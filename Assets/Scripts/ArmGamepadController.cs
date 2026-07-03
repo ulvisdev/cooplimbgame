@@ -29,11 +29,16 @@ public class ArmGamepadController : MonoBehaviour
         if (pad == null) return;
 
         float trigger = isLeftArm ? pad.leftTrigger.ReadValue() : pad.rightTrigger.ReadValue();
+        if (trigger < 0.05f) trigger = 0f; // Deadzone for trigger
+
         Vector2 stick = isLeftArm ? pad.leftStick.ReadValue() : pad.rightStick.ReadValue();
+
         bool gripping = isLeftArm ? pad.leftShoulder.isPressed : pad.rightShoulder.isPressed;
 
         float shoulderAngle = Mathf.Lerp(shoulderDownAngle, shoulderUpAngle, trigger);
-        float elbowAngle = Mathf.Lerp(elbowStraightAngle, elbowBentAngle, (stick.y + 1f) / 2f);
+
+        float bendAmount = Mathf.Max(0f, -stick.y);
+        float elbowAngle = Mathf.Lerp(elbowStraightAngle, elbowBentAngle, bendAmount);
 
         shoulderJoint.targetRotation = Quaternion.Euler(shoulderAngle, 0f, 0f);
         elbowJoint.targetRotation = Quaternion.Euler(elbowAngle, 0f, 0f);
