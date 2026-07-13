@@ -1,47 +1,93 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 public class HandGrabber : MonoBehaviour
 {
+    [Header("Input")]
+    [SerializeField] private LimbInputSource inputSource;
+
+    [Header("Hand")]
     public Rigidbody handRb;
-    public bool isLeftHand = true;
+
+    [Header("Grip Strength")]
+    public float breakForce = 1500f;
+    public float breakTorque = 1500f;
 
     private Rigidbody nearbyRb;
     private FixedJoint gripJoint;
 
-    void OnTriggerEnter(Collider other)
+    private void Awake()
     {
-        if (other.attachedRigidbody != null)
-            nearbyRb = other.attachedRigidbody;
+        if (handRb == null)
+            handRb = GetComponent<Rigidbody>();
+
+        if (inputSource == null)
+            inputSource = GetComponentInParent<LimbInputSource>();
     }
 
-    void OnTriggerExit(Collider other)
+    private void OnTriggerEnter(Collider other)
     {
-        if (other.attachedRigidbody == nearbyRb && gripJoint == null)
+        Rigidbody otherRb = other.attachedRigidbody;
+
+        if (otherRb == null)
+            return;
+
+        if (otherRb == handRb)
+            return;
+
+        nearbyRb = otherRb;
+    }
+
+    private void OnTriggerExit(Collider other)
+    {
+        if (other.attachedRigidbody == nearbyRb &&
+            gripJoint == null)
+        {
             nearbyRb = null;
+        }
     }
 
-    void Update()
+    private void Update()
     {
-        var pad = Gamepad.current;
-        if (pad == null) return;
-
-        bool gripPressed = isLeftHand
-            ? pad.leftShoulder.isPressed
-            : pad.rightShoulder.isPressed;
-
-        if (gripPressed && gripJoint == null && nearbyRb != null)
+        if (inputSource == null ||
+            !inputSource.IsConfigured)
         {
-            gripJoint = handRb.gameObject.AddComponent<FixedJoint>();
-            gripJoint.connectedBody = nearbyRb;
-            gripJoint.breakForce = 1500f;
-            gripJoint.breakTorque = 1500f;
+            ReleaseGrip();
+            return;
         }
 
-        if (!gripPressed && gripJoint != null)
+        bool gripPressed =
+            inputSource.ShoulderIsPressed();
+
+        if (gripPressed &&
+            gripJoint == null &&
+            nearbyRb != null)
         {
-            Destroy(gripJoint);
-            gripJoint = null;
+            CreateGrip();
         }
+
+        if (!gripPressed)
+            ReleaseGrip();
+    }
+
+    private void CreateGrip()
+    {
+        if (handRb == null || nearbyRb == null)
+            return;
+
+        gripJoint =
+            handRb.gameObject.AddComponent<FixedJoint>();
+
+        gripJoint.connectedBody = nearbyRb;
+        gripJoint.breakForce = breakForce;
+        gripJoint.breakTorque = breakTorque;
+    }
+
+    private void ReleaseGrip()
+    {
+        if (gripJoint == null)
+            return;
+
+        Destroy(gripJoint);
+        gripJoint = null;
     }
 }

@@ -1,75 +1,143 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 public class FootGroundStick : MonoBehaviour
 {
-    public bool isLeftFoot = true;
+    [Header("Input")]
+    [SerializeField] private LimbInputSource inputSource;
+
+    [Header("Foot")]
     public Rigidbody footRb;
+
+    [Header("Ground Stick")]
     public float liftThreshold = 0.2f;
     public float angleLimit = 10f;
+
+    [Header("Joint Drive")]
+    public float positionSpring = 5000f;
+    public float positionDamper = 300f;
+    public float maximumForce = 10000f;
 
     private ConfigurableJoint groundJoint;
     private bool touchingGround;
 
-    void OnCollisionEnter(Collision collision)
+    private void Awake()
+    {
+        if (footRb == null)
+            footRb = GetComponent<Rigidbody>();
+
+        if (inputSource == null)
+            inputSource = GetComponentInParent<LimbInputSource>();
+    }
+
+    private void OnCollisionEnter(Collision collision)
     {
         if (collision.gameObject.CompareTag("Ground"))
             touchingGround = true;
     }
 
-    void OnCollisionExit(Collision collision)
+    private void OnCollisionExit(Collision collision)
     {
         if (collision.gameObject.CompareTag("Ground"))
             touchingGround = false;
     }
 
-    void Update()
+    private void Update()
     {
-        var pad = Gamepad.current;
-        if (pad == null) return;
+        if (inputSource == null ||
+            !inputSource.IsConfigured)
+        {
+            RemoveGroundJoint();
+            return;
+        }
 
-        float trigger = isLeftFoot ? pad.leftTrigger.ReadValue() : pad.rightTrigger.ReadValue();
-        bool shouldStick = touchingGround && trigger < liftThreshold;
+        float trigger = inputSource.ReadTrigger();
+
+        bool shouldStick =
+            touchingGround &&
+            trigger < liftThreshold;
 
         if (shouldStick && groundJoint == null)
             CreateGroundJoint();
 
-        if (!shouldStick && groundJoint != null)
-        {
-            Destroy(groundJoint);
-            groundJoint = null;
-        }
+        if (!shouldStick)
+            RemoveGroundJoint();
     }
 
-    void CreateGroundJoint()
+    private void CreateGroundJoint()
     {
-        groundJoint = footRb.gameObject.AddComponent<ConfigurableJoint>();
+        if (footRb == null)
+            return;
+
+        groundJoint =
+            footRb.gameObject.AddComponent<ConfigurableJoint>();
+
         groundJoint.connectedBody = null;
 
-        groundJoint.xMotion = ConfigurableJointMotion.Locked;
-        groundJoint.yMotion = ConfigurableJointMotion.Locked;
-        groundJoint.zMotion = ConfigurableJointMotion.Locked;
+        groundJoint.xMotion =
+            ConfigurableJointMotion.Locked;
 
-        groundJoint.angularXMotion = ConfigurableJointMotion.Limited;
-        groundJoint.angularYMotion = ConfigurableJointMotion.Limited;
-        groundJoint.angularZMotion = ConfigurableJointMotion.Limited;
+        groundJoint.yMotion =
+            ConfigurableJointMotion.Locked;
 
-        SoftJointLimit limit = new SoftJointLimit();
-        limit.limit = angleLimit;
+        groundJoint.zMotion =
+            ConfigurableJointMotion.Locked;
 
-        groundJoint.lowAngularXLimit = limit;
-        groundJoint.highAngularXLimit = limit;
-        groundJoint.angularYLimit = limit;
-        groundJoint.angularZLimit = limit;
+        groundJoint.angularXMotion =
+            ConfigurableJointMotion.Limited;
 
-        groundJoint.rotationDriveMode = RotationDriveMode.Slerp;
+        groundJoint.angularYMotion =
+            ConfigurableJointMotion.Limited;
 
-        JointDrive drive = new JointDrive();
-        drive.positionSpring = 5000f;
-        drive.positionDamper = 300f;
-        drive.maximumForce = 10000f;
+        groundJoint.angularZMotion =
+            ConfigurableJointMotion.Limited;
+
+        SoftJointLimit lowXLimit =
+            new SoftJointLimit
+            {
+                limit = -angleLimit
+            };
+
+        SoftJointLimit highXLimit =
+            new SoftJointLimit
+            {
+                limit = angleLimit
+            };
+
+        SoftJointLimit sideLimit =
+            new SoftJointLimit
+            {
+                limit = angleLimit
+            };
+
+        groundJoint.lowAngularXLimit = lowXLimit;
+        groundJoint.highAngularXLimit = highXLimit;
+        groundJoint.angularYLimit = sideLimit;
+        groundJoint.angularZLimit = sideLimit;
+
+        groundJoint.rotationDriveMode =
+            RotationDriveMode.Slerp;
+
+        JointDrive drive = new JointDrive
+        {
+            positionSpring = positionSpring,
+            positionDamper = positionDamper,
+            maximumForce = maximumForce
+        };
 
         groundJoint.slerpDrive = drive;
     }
-}
 
+    private void RemoveGroundJoint()
+    {
+        if (groundJoint == null)
+            return;
+
+        Destroy(groundJoint);
+        groundJoint = null;
+    }
+
+    private void OnDisable()
+    {
+        RemoveGroundJoint();
+    }
+}

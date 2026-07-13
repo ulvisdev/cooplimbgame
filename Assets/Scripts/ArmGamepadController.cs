@@ -1,52 +1,155 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 public class ArmGamepadController : MonoBehaviour
 {
-    public bool isLeftArm = true;
+    [Header("Input")]
+    [SerializeField] private LimbInputSource inputSource;
 
     [Header("Joints")]
     public ConfigurableJoint shoulderJoint;
     public ConfigurableJoint elbowJoint;
 
-    [Header("Shoulder")]
+    [Header("Shoulder Forward/Up")]
     public float shoulderDownAngle = 14f;
-    public float shoulderUpAngle = -150f;
+    public float shoulderUpAngle = -160f;
+
+    [Header("Shoulder Side Motion")]
+    public float shoulderSideMaxAngle = 75f;
+    public bool invertShoulderSide = false;
+
+    [Header("Shoulder Twist Optional")]
+    public float shoulderTwistMaxAngle = 25f;
+    public bool useShoulderTwist = false;
 
     [Header("Elbow")]
     public float elbowStraightAngle = 0f;
-    public float elbowBentAngle = -130f;
+    public float elbowBentAngle = -145f;
+
+    [Header("Smoothing")]
+    public float rotationSmoothSpeed = 12f;
 
     [Header("Grip Visual")]
     public Transform handVisual;
     public Vector3 openScale = Vector3.one;
-    public Vector3 gripScale = new Vector3(1.25f, 1.25f, 1.25f);
+    public Vector3 gripScale =
+        new Vector3(1.25f, 1.25f, 1.25f);
+
     public float gripSpeed = 12f;
 
-    void Update()
+    private Quaternion shoulderTarget;
+    private Quaternion elbowTarget;
+
+    private void Start()
     {
-        var pad = Gamepad.current;
-        if (pad == null) return;
+        if (shoulderJoint != null)
+            shoulderTarget = shoulderJoint.targetRotation;
 
-        float trigger = isLeftArm ? pad.leftTrigger.ReadValue() : pad.rightTrigger.ReadValue();
-        if (trigger < 0.05f) trigger = 0f; // Deadzone for trigger
+        if (elbowJoint != null)
+            elbowTarget = elbowJoint.targetRotation;
+    }
 
-        Vector2 stick = isLeftArm ? pad.leftStick.ReadValue() : pad.rightStick.ReadValue();
+    private void Update()
+    {
+        if (inputSource == null ||
+            !inputSource.IsConfigured)
+        {
+            return;
+        }
 
-        bool gripping = isLeftArm ? pad.leftShoulder.isPressed : pad.rightShoulder.isPressed;
+        if (shoulderJoint == null ||
+            elbowJoint == null)
+        {
+            return;
+        }
 
-        float shoulderAngle = Mathf.Lerp(shoulderDownAngle, shoulderUpAngle, trigger);
+        float trigger = inputSource.ReadTrigger();
 
-        float bendAmount = Mathf.Max(0f, -stick.y);
-        float elbowAngle = Mathf.Lerp(elbowStraightAngle, elbowBentAngle, bendAmount);
+        if (trigger < 0.05f)
+            trigger = 0f;
 
-        shoulderJoint.targetRotation = Quaternion.Euler(shoulderAngle, 0f, 0f);
-        elbowJoint.targetRotation = Quaternion.Euler(elbowAngle, 0f, 0f);
+        Vector2 stick = inputSource.ReadStick();
+        bool gripping = inputSource.ShoulderIsPressed();
+
+        float shoulderForwardAngle = Mathf.Lerp(
+            shoulderDownAngle,
+            shoulderUpAngle,
+            trigger
+        );
+
+        float sideInput = stick.x;
+
+        if (invertShoulderSide)
+            sideInput *= -1f;
+
+        float shoulderSideAngle =
+            sideInput * shoulderSideMaxAngle;
+
+        float shoulderTwistAngle = 0f;
+
+        if (useShoulderTwist)
+        {
+            shoulderTwistAngle =
+                inputSource.ReadTwistInput() *
+                shoulderTwistMaxAngle;
+        }
+
+        float bendAmount = Mathf.Clamp01(-stick.y);
+
+        float elbowAngle = Mathf.Lerp(
+            elbowStraightAngle,
+            elbowBentAngle,
+            bendAmount
+        );
+
+        Quaternion forwardRot = Quaternion.AngleAxis(
+            shoulderForwardAngle,
+            Vector3.right
+        );
+
+        Quaternion sideRot = Quaternion.AngleAxis(
+            shoulderSideAngle,
+            Vector3.forward
+        );
+
+        Quaternion twistRot = Quaternion.AngleAxis(
+            shoulderTwistAngle,
+            Vector3.up
+        );
+
+        Quaternion wantedShoulder =
+            twistRot * sideRot * forwardRot;
+
+        Quaternion wantedElbow = Quaternion.Euler(
+            elbowAngle,
+            0f,
+            0f
+        );
+
+        shoulderTarget = Quaternion.Slerp(
+            shoulderTarget,
+            wantedShoulder,
+            Time.deltaTime * rotationSmoothSpeed
+        );
+
+        elbowTarget = Quaternion.Slerp(
+            elbowTarget,
+            wantedElbow,
+            Time.deltaTime * rotationSmoothSpeed
+        );
+
+        shoulderJoint.targetRotation = shoulderTarget;
+        elbowJoint.targetRotation = elbowTarget;
 
         if (handVisual != null)
         {
-            Vector3 targetScale = gripping ? gripScale : openScale;
-            handVisual.localScale = Vector3.Lerp(handVisual.localScale, targetScale, Time.deltaTime * gripSpeed);
+            Vector3 targetScale =
+                gripping ? gripScale : openScale;
+
+            handVisual.localScale = Vector3.Lerp(
+                handVisual.localScale,
+                targetScale,
+                Time.deltaTime * gripSpeed
+            );
         }
     }
 }
