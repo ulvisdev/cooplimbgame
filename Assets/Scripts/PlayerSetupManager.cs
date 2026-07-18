@@ -203,7 +203,7 @@ public class PlayerSetupManager : MonoBehaviour
         {
             statusText.text =
                 $"Players joined: {joined}/{target}. " +
-                "Press a button on another controller.";
+                "Press A on your controller to join.";
         }
         else if (!GameSession.Instance.IsSetupValid())
         {
